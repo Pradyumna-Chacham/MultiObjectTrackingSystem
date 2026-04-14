@@ -1,19 +1,19 @@
 system:
   seed: 42
 
-device: auto   # auto | cpu | cuda | mps
+device: auto
 
 detector:
   name: ultralytics
   weights: models/yolov9c.pt
-  conf_threshold: 0.15
-  iou_threshold: 0.5
-  classes: [0]
+  conf_threshold: 0.25
+  iou_threshold: 0.45
+  classes: [0, 1, 2, 3, 5, 7]
 
 tracker:
   name: deepsort
-  max_age: 50
-  n_init: 2
+  max_age: 30
+  n_init: 3
   embedder: mobilenet
 
 events:

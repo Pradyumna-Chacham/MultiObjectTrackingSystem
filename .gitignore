@@ -14,3 +14,73 @@ yolo11n.pt
 .idea/
 .vscode/
 *.code-workspace
+
+# =========================
+# Virtual Environments
+# =========================
+venv/
+env/
+ENV/
+.venv/
+
+# =========================
+# Model Weights
+# =========================
+models/*.pt
+models/*.pth
+models/*.onnx
+
+# =========================
+# Dataset (VERY IMPORTANT)
+# =========================
+MOT17-*/
+MOT*/
+datasets/
+data/
+*.jpg
+*.png
+
+# =========================
+# Videos (inputs)
+# =========================
+demo/sample_videos/*.mp4
+demo/sample_videos/*.avi
+
+# =========================
+# Outputs (generated files)
+# =========================
+demo/sample_outputs/
+evaluation/results/
+*.mp4
+*.txt
+*.json
+*.csv
+
+# =========================
+# Logs / profiling
+# =========================
+*.out
+*.err
+logs/
+
+# =========================
+# Pytest
+# =========================
+.pytest_cache/
+
+# =========================
+# OS files
+# =========================
+.DS_Store
+Thumbs.db
+
+# =========================
+# Git
+# =========================
+.git/
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
