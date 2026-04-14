@@ -60,6 +60,7 @@ evaluation/results/
 *.txt
 *.json
 *.csv
+!requirements.txt
 
 # =========================
 # Logs / profiling

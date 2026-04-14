@@ -1,0 +1,16 @@
+numpy<2.0
+opencv-python==4.10.0.84
+PyYAML==6.0.2
+pydantic==2.9.2
+tqdm==4.66.5
+gradio==5.1.0
+pytest==8.3.3
+ruff==0.6.9
+motmetrics==1.4.0
+deep-sort-realtime==1.3.2
+torch>=2.2.0
+torchvision>=0.17.0
+ultralytics>=8.3.0
+pytest-cov==4.0.0
+coverage==7.2.7
+setuptools<70
