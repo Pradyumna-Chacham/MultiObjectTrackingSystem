@@ -4,16 +4,16 @@ system:
 device: auto   # auto | cpu | cuda | mps
 
 detector:
-  name: yolov9
-  weights: models/yolov9-c.pt
-  conf_threshold: 0.25
-  iou_threshold: 0.45
-  classes: [0, 1, 2, 3, 5, 7]
+  name: ultralytics
+  weights: models/yolov9c.pt
+  conf_threshold: 0.15
+  iou_threshold: 0.5
+  classes: [0]
 
 tracker:
   name: deepsort
-  max_age: 30
-  n_init: 3
+  max_age: 60
+  n_init: 2
   embedder: mobilenet
 
 events:
