@@ -1,19 +1,23 @@
-.DS_Store
-.coverage
-.pytest_cache/
+# =========================
+# Python
+# =========================
 __pycache__/
+*.py[cod]
 *.pyc
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+*.log
 
-venv/
-.venv/
-
-demo/
-models/
-yolo11n.pt
-
-.idea/
-.vscode/
-*.code-workspace
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+*.ipynb_checkpoints
 
 # =========================
 # Virtual Environments
@@ -26,9 +30,10 @@ ENV/
 # =========================
 # Model Weights
 # =========================
-models/*.pt
-models/*.pth
-models/*.onnx
+models/
+*.pt
+*.pth
+*.onnx
 
 # =========================
 # Dataset (VERY IMPORTANT)
@@ -67,6 +72,7 @@ logs/
 # Pytest
 # =========================
 .pytest_cache/
+.coverage
 
 # =========================
 # OS files
@@ -75,12 +81,14 @@ logs/
 Thumbs.db
 
 # =========================
-# Git
-# =========================
-.git/
-
-# =========================
 # IDE
 # =========================
 .vscode/
 .idea/
+*.code-workspace
+
+# =========================
+# Misc
+# =========================
+demo/
+yolo11n.pt

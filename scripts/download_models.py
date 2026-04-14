@@ -1,24 +1,29 @@
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.request import urlretrieve
-
-
-YOLOV9_C_URL = "https://github.com/WongKinYiu/yolov9/releases/download/v0.1/yolov9-c.pt"
+from ultralytics import YOLO
 
 
 def main() -> None:
     models_dir = Path("models")
     models_dir.mkdir(parents=True, exist_ok=True)
-    output_path = models_dir / "yolov9-c.pt"
 
-    if output_path.exists():
-        print(f"YOLOv9 weights already present at: {output_path.resolve()}")
+    model_path = models_dir / "yolov9c.pt"
+
+    if model_path.exists():
+        print(f"YOLOv9c weights already present at: {model_path.resolve()}")
         return
 
-    print(f"Downloading YOLOv9 weights to: {output_path.resolve()}")
-    urlretrieve(YOLOV9_C_URL, output_path)
-    print("Download complete.")
+    print("Downloading YOLOv9c weights via Ultralytics...")
+
+    # This triggers auto-download from Ultralytics
+    model = YOLO("yolov9c.pt")
+
+    # Save weights locally in your models directory
+    model.export(format="torchscript")  # optional (forces load)
+    model.model.save(str(model_path))   # ensure saved locally
+
+    print(f"Download complete. Saved to: {model_path.resolve()}")
 
 
 if __name__ == "__main__":
