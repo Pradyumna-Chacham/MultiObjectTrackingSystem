@@ -1,0 +1,44 @@
+device: auto
+
+detector:
+  name: ultralytics
+  weights: rtdetr-l.pt
+  conf_threshold: 0.45
+  iou_threshold: 0.50
+  classes: [0]
+  imgsz: 960
+  half: true
+  verbose: false
+
+tracker:
+  name: ocsort
+  det_thresh: 0.45
+  max_age: 20
+  min_hits: 2
+  iou_threshold: 0.30
+  per_class: false
+
+input:
+  path: demo/sample_videos/mot17_09_frcnn.mp4
+  frame_skip: 1
+  start_frame: 0
+  max_frames: 300
+
+output:
+  video_path: demo/sample_outputs/output_fast.mp4
+  mot_path: demo/sample_outputs/output_fast.mot.txt
+  tracks_json_path: demo/sample_outputs/output_fast.tracks.json
+  save_video: true
+  save_mot: true
+  save_tracks_json: true
+
+visualization:
+  draw_boxes: true
+  draw_labels: false
+  draw_track_ids: true
+  line_width: 2
+  font_scale: 0.5
+
+profiling:
+  enabled: true
+  log_every_n_frames: 25

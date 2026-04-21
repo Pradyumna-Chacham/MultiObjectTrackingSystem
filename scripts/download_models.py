@@ -1,29 +1,37 @@
 from __future__ import annotations
 
 from pathlib import Path
+import shutil
 from ultralytics import YOLO
+
+
+MODEL_NAME = "rtdetr-l.pt"   # change to yolov9c.pt if needed
 
 
 def main() -> None:
     models_dir = Path("models")
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    model_path = models_dir / "yolov9c.pt"
+    output_path = models_dir / MODEL_NAME
 
-    if model_path.exists():
-        print(f"YOLOv9c weights already present at: {model_path.resolve()}")
+    if output_path.exists():
+        print(f"Model already present at: {output_path.resolve()}")
         return
 
-    print("Downloading YOLOv9c weights via Ultralytics...")
+    print(f"Downloading {MODEL_NAME} via Ultralytics...")
 
-    # This triggers auto-download from Ultralytics
-    model = YOLO("yolov9c.pt")
+    # This downloads + loads the model
+    model = YOLO(MODEL_NAME)
 
-    # Save weights locally in your models directory
-    model.export(format="torchscript")  # optional (forces load)
-    model.model.save(str(model_path))   # ensure saved locally
+    # Get actual downloaded file path
+    source_path = Path(model.ckpt_path)
 
-    print(f"Download complete. Saved to: {model_path.resolve()}")
+    print(f"Downloaded to cache: {source_path}")
+
+    # Copy to your models directory
+    shutil.copy(source_path, output_path)
+
+    print(f"Saved locally to: {output_path.resolve()}")
 
 
 if __name__ == "__main__":

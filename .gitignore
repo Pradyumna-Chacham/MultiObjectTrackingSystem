@@ -3,93 +3,86 @@
 # =========================
 __pycache__/
 *.py[cod]
-*.pyc
 *.pyo
 *.pyd
 *.so
-*.egg
-*.egg-info/
-dist/
-build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# =========================
+# Jupyter / checkpoints
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# macOS / system files
+# =========================
+.DS_Store
+
+# =========================
+# Logs
+# =========================
 *.log
 
 # =========================
-# Jupyter
+# Model weights (VERY IMPORTANT)
 # =========================
-.ipynb_checkpoints/
-*.ipynb_checkpoints
-
-# =========================
-# Virtual Environments
-# =========================
-venv/
-env/
-ENV/
-.venv/
-
-# =========================
-# Model Weights
-# =========================
-models/
 *.pt
 *.pth
-*.onnx
+*.ckpt
+models/
 
 # =========================
-# Dataset (VERY IMPORTANT)
+# Large data / datasets
 # =========================
-MOT17-*/
-MOT*/
-datasets/
-data/
-*.jpg
-*.png
+MOT17*/
+*.zip
+*.tar
+*.gz
 
 # =========================
-# Videos (inputs)
+# Generated outputs
 # =========================
-demo/sample_videos/*.mp4
-demo/sample_videos/*.avi
-
-# =========================
-# Outputs (generated files)
-# =========================
+demo/hf_runs/
 demo/sample_outputs/
+demo/sample_videos/
+
+# =========================
+# FAISS / RAG artifacts
+# =========================
+*.faiss
+*.index
+
+# =========================
+# Evaluation results
+# =========================
 evaluation/results/
-*.mp4
-*.txt
-*.json
-*.csv
-!requirements.txt
 
 # =========================
-# Logs / profiling
+# Temporary / cache
 # =========================
-*.out
-*.err
-logs/
+.cache/
+tmp/
+temp/
 
 # =========================
-# Pytest
-# =========================
-.pytest_cache/
-.coverage
-
-# =========================
-# OS files
-# =========================
-.DS_Store
-Thumbs.db
-
-# =========================
-# IDE
+# IDEs
 # =========================
 .vscode/
 .idea/
-*.code-workspace
+
+# =========================
+# Build / packaging
+# =========================
+build/
+dist/
+*.egg-info/
 
 # =========================
 # Misc
 # =========================
-demo/
-yolo11n.pt
+*.bundle

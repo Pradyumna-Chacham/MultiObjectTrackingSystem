@@ -1,153 +1,319 @@
-# Multi-Object Tracking with YOLOv9 and DeepSORT
+# Multi-Object Tracking with RT-DETR, OC-SORT, and Video RAG
 
-This project is a modular multi-object tracking pipeline for videos and MOT-style benchmark sequences. It combines an Ultralytics YOLO detector with a DeepSORT tracker, draws annotated output videos, exports track results in MOTChallenge text format, and provides a small evaluation utility for computing standard MOT metrics such as MOTA, MOTP, and IDF1.
+This repository is a modular video analytics project that combines:
 
-At a high level, the workflow is:
+- object detection
+- multi-object tracking
+- MOTChallenge-format export and evaluation
+- structured track/event summarization
+- retrieval-augmented querying over tracking results
+- a Gradio app for upload, processing, and question answering
 
-1. Load a YAML configuration from `configs/`.
-2. Run object detection on each video frame.
-3. Associate detections across frames with DeepSORT.
-4. Draw IDs, boxes, and short track trails on the output video.
-5. Save tracking results as:
-   - an annotated video
-   - a `.tracks.json` file
-   - a `.mot.txt` file in MOTChallenge-compatible prediction format
-6. Optionally evaluate the `.mot.txt` predictions against MOT ground truth.
+The codebase started with a YOLO/DeepSORT-style pipeline and now also contains a newer RT-DETR + OC-SORT + RAG workflow. In the current workspace, the RT-DETR + OC-SORT path is the most complete and safest path to document as the primary quick start.
 
-The codebase is organized so that detection, tracking, captioning, export, and evaluation are separated into small modules under `src/` and `evaluation/`.
+## What The Project Does
 
-## Project Overview
+At a high level, the project processes a video in stages:
 
-### What the project currently does
+1. Read frames from an input video.
+2. Detect objects in each frame with an Ultralytics model.
+3. Associate detections over time with a tracker.
+4. Draw tracked bounding boxes, IDs, and trails on an output video.
+5. Export frame-level tracking results to:
+   - an annotated `.mp4`
+   - a frame-level `.tracks.json`
+   - a MOT-format `.mot.txt`
+6. Consolidate frame snapshots into per-track histories.
+7. Extract structured events and per-track facts.
+8. Convert those facts into retrieval chunks.
+9. Build a FAISS index over the chunks.
+10. Answer grounded natural-language questions using precomputed video facts plus retrieval evidence.
 
-- Runs video-based multi-object tracking using YOLO + DeepSORT
-- Supports configurable model/device settings through YAML files
-- Produces annotated `.mp4` output videos
-- Produces `.tracks.json` files containing exported tracking data
-- Produces `.mot.txt` files for benchmark evaluation
-- Evaluates predictions against MOT ground truth using `motmetrics`
+## Main Features
 
-### Main implementation flow
+- Modular detector and tracker factories under `src/detectors/` and `src/trackers/`
+- End-to-end pipeline orchestration in `src/pipeline/orchestrator.py`
+- Annotated video generation with per-track labels and motion trails
+- MOT-format export for benchmark-style evaluation
+- MOT evaluation script using `motmetrics`
+- Track consolidation and event extraction for downstream analytics
+- FAISS-based retrieval over tracking-derived text chunks
+- Gradio interface for uploaded-video processing and QA
+
+## Current Architecture
+
+### Tracking pipeline
+
+The tracking path is driven by:
 
 - `scripts/run_demo.py`
-  - command-line entry point for running tracking on a video
 - `src/config.py`
-  - loads YAML config and resolves device selection (`cpu`, `cuda`, `mps`, or `auto`)
-- `src/detectors/`
-  - detector adapters and detector factory
-- `src/trackers/`
-  - DeepSORT tracker wrapper and tracker factory
+- `src/detectors/factory.py`
+- `src/trackers/factory.py`
 - `src/pipeline/orchestrator.py`
-  - coordinates reading frames, detection, tracking, annotation, video writing, and export
+- `src/io/video_reader.py`
+- `src/io/video_writer.py`
 - `src/io/mot_exporter.py`
-  - writes MOTChallenge-format prediction files
-- `evaluation/evaluate_mot.py`
-  - computes MOTA, MOTP, IDF1, ID switches, misses, false positives, and related metrics
+- `src/annotator.py`
+
+The orchestrator loads the detector, resets the tracker, reads frames, runs detection and tracking, annotates frames, writes the output video, and optionally saves:
+
+- `*.tracks.json`
+- `*.mot.txt`
+
+### RAG/analytics pipeline
+
+The structured analytics path is driven by:
+
+- `scripts/build_tracks.py`
+- `scripts/extract_events.py`
+- `scripts/build_chunks.py`
+- `scripts/build_video_facts.py`
+- `scripts/build_index.py`
+- `scripts/query_rag.py`
+
+Those scripts use the modules in `src/rag/` to transform tracking output into:
+
+- built track histories
+- extracted events
+- track facts
+- retrieval chunks
+- video-level summary facts
+- a FAISS index and metadata file
+
+### Web app
+
+The Gradio app in `app.py` ties the whole flow together:
+
+1. Upload a video.
+2. Run tracking.
+3. Build all RAG artifacts.
+4. Download generated files.
+5. Ask grounded questions about the processed video.
 
 ## Repository Structure
 
 ```text
 .
-├── configs/                 # YAML configuration files
-├── demo/
-│   ├── sample_videos/       # Input videos for demo runs
-│   └── sample_outputs/      # Generated videos, MOT text files, and JSON exports
+├── app.py
+├── configs/
+│   ├── default.yaml
+│   ├── rtdetr_ocsort.yaml
+│   ├── rtdetr_ocsort_fast.yaml
+│   ├── rtdetr_ocsort_x.yaml
+│   └── ultralytics_deepsort.yaml
 ├── evaluation/
-│   ├── evaluate_mot.py      # Metrics script
-│   └── results/             # Saved evaluation reports
-├── models/                  # YOLO weights
+│   └── evaluate_mot.py
 ├── scripts/
-│   ├── download_models.py   # Downloads/saves YOLO weights
-│   └── run_demo.py          # Main tracking runner
+│   ├── run_demo.py
+│   ├── download_models.py
+│   ├── build_tracks.py
+│   ├── extract_events.py
+│   ├── build_chunks.py
+│   ├── build_video_facts.py
+│   ├── build_index.py
+│   └── query_rag.py
 ├── src/
-│   ├── detectors/           # Detection adapters
-│   ├── trackers/            # Tracking adapters
-│   ├── io/                  # Video and MOT export utilities
-│   ├── pipeline/            # End-to-end orchestration
-│   ├── captioning/          # Template captioning scaffolding
-│   └── utils/               # Bounding-box helpers
-├── tests/                   # Unit tests
-├── MOT17-04-FRCNN/          # Local/manual dataset folder placeholder
-├── MOT17-09-FRCNN/          # MOT sequence folder
-├── MOT17-11-FRCNN/          # MOT sequence folder
+│   ├── detectors/
+│   ├── trackers/
+│   ├── rag/
+│   ├── io/
+│   ├── captioning/
+│   ├── pipeline/
+│   ├── utils/
+│   ├── annotator.py
+│   ├── config.py
+│   └── schemas.py
+├── tests/
+├── demo/
+├── MOT17-04-FRCNN/
+├── MOT17-09-FRCNN/
+├── MOT17-11-FRCNN/
 ├── Makefile
 ├── pyproject.toml
 └── requirements.txt
 ```
 
-## Important Folders You Should Have
+## Important Files And Folders
 
-Before running the project, make sure these folders exist:
+### Configs
 
-```bash
-mkdir -p demo/sample_videos
-mkdir -p demo/sample_outputs
-mkdir -p evaluation/results
-mkdir -p models
-```
+- `configs/rtdetr_ocsort.yaml`
+  Primary config for RT-DETR + OC-SORT.
+- `configs/rtdetr_ocsort_fast.yaml`
+  Faster, shorter run variant.
+- `configs/rtdetr_ocsort_x.yaml`
+  Higher-capacity RT-DETR-X variant.
+- `configs/default.yaml`
+  Older config intended for a DeepSORT-based path.
+- `configs/ultralytics_deepsort.yaml`
+  Another DeepSORT-oriented config.
 
-If you use the provided `Makefile`, you can create them with:
-
-```bash
-make dirs
-```
-
-### What each runtime folder is used for
+### Demo folders
 
 - `demo/sample_videos/`
-  - put input videos here
+  Local input videos for command-line runs.
 - `demo/sample_outputs/`
-  - output annotated videos, `.mot.txt`, and `.tracks.json` files are written here
-- `evaluation/results/`
-  - metric reports are saved here
-- `models/`
-  - YOLO model weights are stored here
+  Generated videos and JSON/TXT artifacts.
+- `demo/hf_runs/`
+  Per-run Gradio app output bundles.
 
-## About the `MOT17-04-FRCNN`, `MOT17-09-FRCNN`, and `MOT17-11-FRCNN` Folders
+### MOT sequence folders
 
-These folders are MOTChallenge-style sequence directories placed directly in the workspace.
+The workspace includes local MOT-style sequence folders such as:
 
-### Current state in this workspace
+- `MOT17-09-FRCNN/`
+- `MOT17-11-FRCNN/`
+- `MOT17-04-FRCNN/`
 
-- `MOT17-09-FRCNN/` contains:
-  - `img1/`
-  - `gt/gt.txt`
-  - `det/det.txt`
-  - `seqinfo.ini`
-- `MOT17-11-FRCNN/` contains:
-  - `img1/`
-  - `gt/gt.txt`
-  - `det/det.txt`
-  - `seqinfo.ini`
-- `MOT17-04-FRCNN/` currently appears to be a manually added placeholder folder and does not yet contain the standard MOT sequence contents.
+These are treated as local data, not portable source assets. The `.gitignore` excludes model weights, datasets, videos, generated outputs, and evaluation results, so anyone cloning this repo should expect to add those assets locally.
 
-### Guidance for other users
+## Implemented Outputs
 
-If someone clones this repository, they should not expect these MOT folders to be downloaded automatically. The `.gitignore` is configured to ignore large datasets, images, model weights, videos, and generated outputs, so those assets are expected to be added locally.
+Depending on the workflow, the project can generate:
 
-To use a MOT sequence folder with the evaluation script, the folder should follow this structure:
+- `output.mp4`
+  Annotated tracking video
+- `output.tracks.json`
+  Frame-level track snapshots
+- `output.mot.txt`
+  MOTChallenge-style prediction file
+- `output.built_tracks.json`
+  Consolidated track histories
+- `output.events.json`
+  Extracted event records
+- `output.track_facts.json`
+  Per-track analytics facts
+- `output.chunks.json`
+  Retrieval chunks
+- `output.video_facts.json`
+  Global summary facts
+- `output.faiss.index`
+  Vector index for retrieval
+- `output.index_meta.json`
+  Chunk metadata used during retrieval
 
-```text
-MOT17-XX-FRCNN/
-├── det/
-│   └── det.txt
-├── gt/
-│   └── gt.txt
-├── img1/
-│   ├── 000001.jpg
-│   ├── 000002.jpg
-│   └── ...
-└── seqinfo.ini
-```
+## Detection And Tracking Backends
 
-If you want `MOT17-04-FRCNN/` to be usable, populate it with the same structure as the other MOT sequence folders, especially:
+### Detector support
 
-- `MOT17-04-FRCNN/img1/`
-- `MOT17-04-FRCNN/gt/gt.txt`
-- `MOT17-04-FRCNN/det/det.txt`
-- `MOT17-04-FRCNN/seqinfo.ini`
+The detector factory currently supports:
 
-Without `gt/gt.txt` and `seqinfo.ini`, you cannot run benchmark evaluation on that sequence.
+- `ultralytics`
+- `yolov9` placeholder/stub
+
+In practice, the working configs use the Ultralytics integration with RT-DETR weights such as `rtdetr-l.pt` and `rtdetr-x.pt`.
+
+### Tracker support
+
+The tracker factory currently supports:
+
+- `ocsort`
+- `deepsort`
+
+In this workspace, the `ocsort` path is the reliable documented path. The current DeepSORT configs do not include `tracker.max_iou_distance`, which the factory expects, so the RT-DETR + OC-SORT configs are the recommended choice for running the project as-is.
+
+## RAG Workflow Details
+
+After tracking finishes, the RAG pipeline adds structure in several stages:
+
+### 1. Track building
+
+`scripts/build_tracks.py` groups frame-level snapshots by `track_id` and computes:
+
+- first/last frame
+- duration
+- average confidence
+- displacement
+- path length
+- direction
+- estimated entry/exit side
+- short-lived and fragmented flags
+
+### 2. Event extraction
+
+`scripts/extract_events.py` emits events such as:
+
+- `enter`
+- `exit`
+- `direction_motion`
+- `long_presence`
+- `fragmented_track`
+- `crowded_window`
+
+### 3. Chunk generation
+
+`scripts/build_chunks.py` creates retrieval chunks of three types:
+
+- `track`
+- `event`
+- `time_window`
+
+### 4. Video facts
+
+`scripts/build_video_facts.py` precomputes summary facts such as:
+
+- total unique tracks
+- longest track
+- shortest track
+- most crowded window
+- entry/exit counts by side
+- direction counts
+- average track duration
+
+### 5. Retrieval and answering
+
+`scripts/build_index.py` builds a FAISS index over chunk text using a sentence-transformer embedding model.
+
+`scripts/query_rag.py` and `app.py` then:
+
+- retrieve the most relevant chunks
+- prefer exact answers from global video facts when possible
+- fall back to retrieval evidence when needed
+
+## Evaluation
+
+`evaluation/evaluate_mot.py` compares a generated MOT prediction file against a MOT-style sequence directory containing:
+
+- `gt/gt.txt`
+- `seqinfo.ini`
+
+The script computes metrics such as:
+
+- MOTA
+- MOTP
+- IDF1
+- ID precision / recall
+- ID switches
+- false positives
+- misses
+- mostly tracked / partially tracked / mostly lost
+
+Results are written into `evaluation/results/`.
+
+## Requirements
+
+### Python
+
+- Python 3.10+ is declared in `pyproject.toml`
+
+### Main libraries
+
+The repository uses packages from `requirements.txt`, including:
+
+- `torch`
+- `torchvision`
+- `ultralytics`
+- `boxmot`
+- `deep-sort-realtime`
+- `opencv-python`
+- `motmetrics`
+- `faiss-cpu`
+- `sentence-transformers`
+- `gradio`
+- `fastapi`
+- `pytest`
+- `ruff`
 
 ## Setup
 
@@ -155,345 +321,276 @@ Without `gt/gt.txt` and `seqinfo.ini`, you cannot run benchmark evaluation on th
 
 ```bash
 git clone <your-repo-url>
-cd MultiObjectTracking-Yolov9
+cd MultiObjectTracking-RTDETR-OCSORT-RAG
 ```
 
-### 2. Install the project
-
-The repo uses a virtual environment in `venv/`.
-
-```bash
-make install
-```
-
-What `make install` does:
-
-- creates `venv/`
-- upgrades `pip`
-- installs dependencies from `requirements.txt`
-
-If you prefer to run the same steps manually:
+### 2. Create and activate a virtual environment
 
 ```bash
 python3 -m venv venv
-venv/bin/python -m pip install --upgrade pip
-venv/bin/python -m pip install -r requirements.txt
+source venv/bin/activate
 ```
 
-### 3. Create required folders
+### 3. Install dependencies
 
 ```bash
+pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### 4. Create local runtime folders
+
+```bash
+mkdir -p demo/sample_videos demo/sample_outputs demo/hf_runs evaluation/results models
+```
+
+If you prefer using the `Makefile`:
+
+```bash
+make install
 make dirs
 ```
 
-Or manually:
+## Download Model Weights
+
+The repository ignores model weights, so they need to exist locally.
+
+To download the default RT-DETR-L weight used by the current download script:
 
 ```bash
-mkdir -p demo/sample_videos demo/sample_outputs evaluation/results models
+PYTHONPATH=. venv/bin/python scripts/download_models.py
 ```
 
-### 4. Download model weights
-
-```bash
-make download-models
-```
-
-This downloads or saves the YOLOv9 weights into:
+That script saves the model into:
 
 ```text
-models/yolov9c.pt
+models/rtdetr-l.pt
 ```
 
-## Running the Tracker
+The RT-DETR configs in this workspace currently reference:
 
-### Quick run with the default Make command
+- `rtdetr-l.pt`
+- `rtdetr-x.pt`
 
-```bash
-make run
-```
+If your chosen config points to a different location, either place the file there or update the config.
 
-This uses:
+## Commands To Run The Project
 
-- config: `configs/default.yaml`
-- input video: `demo/sample_videos/sample.mp4`
-- output video: `demo/sample_outputs/output.mp4`
+This section is ordered from the simplest working path to the full analytics and QA workflow.
 
-### Run with your own paths
+### 1. Run the main tracking pipeline
 
-You can override the paths through `make` variables:
-
-```bash
-make run \
-  CONFIG=configs/default.yaml \
-  INPUT=demo/sample_videos/mot17_09_frcnn.mp4 \
-  OUTPUT=demo/sample_outputs/mot17_09_frcnn.mp4
-```
-
-### Run directly with Python
+Recommended command:
 
 ```bash
 PYTHONPATH=. venv/bin/python scripts/run_demo.py \
-  --config configs/default.yaml \
+  --config configs/rtdetr_ocsort.yaml \
   --input demo/sample_videos/mot17_09_frcnn.mp4 \
-  --output demo/sample_outputs/mot17_09_frcnn.mp4
+  --output demo/sample_outputs/mot17-09-ocsort.mp4
 ```
 
-### What gets generated after a run
+This produces:
 
-If your output is:
+- `demo/sample_outputs/mot17-09-ocsort.mp4`
+- `demo/sample_outputs/mot17-09-ocsort.tracks.json`
+- `demo/sample_outputs/mot17-09-ocsort.mot.txt`
 
-```text
-demo/sample_outputs/mot17_09_frcnn.mp4
-```
-
-the pipeline will also generate:
-
-```text
-demo/sample_outputs/mot17_09_frcnn.tracks.json
-demo/sample_outputs/mot17_09_frcnn.mot.txt
-```
-
-These extra files are created automatically by `src/pipeline/orchestrator.py`.
-
-## Example Tracking Commands
-
-### Run on MOT17-09 sample video
+You can also run the faster variant:
 
 ```bash
-make run \
-  CONFIG=configs/default.yaml \
-  INPUT=demo/sample_videos/mot17_09_frcnn.mp4 \
-  OUTPUT=demo/sample_outputs/mot17_09_frcnn.mp4
+PYTHONPATH=. venv/bin/python scripts/run_demo.py \
+  --config configs/rtdetr_ocsort_fast.yaml \
+  --input demo/sample_videos/mot17_09_frcnn.mp4 \
+  --output demo/sample_outputs/mot17-09-ocsort-fast.mp4
 ```
 
-### Run on MOT17-11 sample video
+And the RT-DETR-X variant:
 
 ```bash
-make run \
-  CONFIG=configs/default.yaml \
-  INPUT=demo/sample_videos/mot17_11_frcnn.mp4 \
-  OUTPUT=demo/sample_outputs/mot17_11_frcnn.mp4
+PYTHONPATH=. venv/bin/python scripts/run_demo.py \
+  --config configs/rtdetr_ocsort_x.yaml \
+  --input demo/sample_videos/mot17_09_frcnn.mp4 \
+  --output demo/sample_outputs/mot17-09-ocsort-x.mp4
 ```
 
-### Run on MOT17-04 after you populate the folder and create a video
+### 2. Build consolidated tracks
 
 ```bash
-make run \
-  CONFIG=configs/default.yaml \
-  INPUT=demo/sample_videos/mot17_04.mp4 \
-  OUTPUT=demo/sample_outputs/mot17_04.mp4
+PYTHONPATH=. venv/bin/python scripts/build_tracks.py \
+  --input demo/sample_outputs/mot17-09-ocsort.tracks.json \
+  --output demo/sample_outputs/mot17-09-ocsort.built_tracks.json \
+  --fps 30 \
+  --frame-width 1920 \
+  --frame-height 1080
 ```
 
-## Checking Tracking Metrics
-
-The evaluation script compares a prediction file in MOT format against a MOT sequence directory containing `gt/gt.txt` and `seqinfo.ini`.
-
-### Generic metrics command
+### 3. Extract events and per-track facts
 
 ```bash
-make metrics \
-  PRED=demo/sample_outputs/mot17_09_frcnn.mot.txt \
-  SEQ=MOT17-09-FRCNN
+PYTHONPATH=. venv/bin/python scripts/extract_events.py \
+  --input demo/sample_outputs/mot17-09-ocsort.built_tracks.json \
+  --events-output demo/sample_outputs/mot17-09-ocsort.events.json \
+  --facts-output demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --fps 30
 ```
 
-### Direct Python command
+### 4. Build retrieval chunks
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_chunks.py \
+  --track-facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --events demo/sample_outputs/mot17-09-ocsort.events.json \
+  --output demo/sample_outputs/mot17-09-ocsort.chunks.json \
+  --fps 30
+```
+
+### 5. Build global video facts
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_video_facts.py \
+  --track-facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --events demo/sample_outputs/mot17-09-ocsort.events.json \
+  --chunks demo/sample_outputs/mot17-09-ocsort.chunks.json \
+  --fps 30 \
+  --output demo/sample_outputs/mot17-09-ocsort.video_facts.json
+```
+
+### 6. Build the FAISS retrieval index
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_index.py \
+  --chunks demo/sample_outputs/mot17-09-ocsort.chunks.json \
+  --index-output demo/sample_outputs/mot17-09-ocsort.faiss.index \
+  --metadata-output demo/sample_outputs/mot17-09-ocsort.index_meta.json \
+  --model sentence-transformers/all-MiniLM-L6-v2
+```
+
+### 7. Ask a question from the command line
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/query_rag.py \
+  --index demo/sample_outputs/mot17-09-ocsort.faiss.index \
+  --metadata demo/sample_outputs/mot17-09-ocsort.index_meta.json \
+  --video-facts demo/sample_outputs/mot17-09-ocsort.video_facts.json \
+  --query "Which track stayed the longest?" \
+  --top-k 5 \
+  --model sentence-transformers/all-MiniLM-L6-v2
+```
+
+### 8. Launch the Gradio app
+
+```bash
+PYTHONPATH=. venv/bin/python app.py
+```
+
+Then open the local Gradio URL shown in the terminal, upload a video, run the full pipeline, and ask questions in the second tab.
+
+## Quick Start
+
+If you want the shortest end-to-end sequence:
+
+```bash
+git clone <your-repo-url>
+cd MultiObjectTracking-RTDETR-OCSORT-RAG
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install -r requirements.txt
+mkdir -p demo/sample_videos demo/sample_outputs demo/hf_runs evaluation/results models
+PYTHONPATH=. venv/bin/python scripts/download_models.py
+PYTHONPATH=. venv/bin/python scripts/run_demo.py \
+  --config configs/rtdetr_ocsort.yaml \
+  --input demo/sample_videos/mot17_09_frcnn.mp4 \
+  --output demo/sample_outputs/mot17-09-ocsort.mp4
+```
+
+## MOT Evaluation Commands
+
+Evaluate a generated MOT file against a local MOT sequence directory:
 
 ```bash
 PYTHONPATH=. venv/bin/python evaluation/evaluate_mot.py \
-  --pred demo/sample_outputs/mot17_09_frcnn.mot.txt \
+  --pred demo/sample_outputs/mot17-09-ocsort.mot.txt \
   --sequence-dir MOT17-09-FRCNN
 ```
 
-### Evaluate only a limited duration
+Optional example with a duration cap:
 
 ```bash
 PYTHONPATH=. venv/bin/python evaluation/evaluate_mot.py \
-  --pred demo/sample_outputs/mot17_09_frcnn.mot.txt \
+  --pred demo/sample_outputs/mot17-09-ocsort.mot.txt \
   --sequence-dir MOT17-09-FRCNN \
   --sample-seconds 10
 ```
 
-### Start evaluation from a later frame
+Results are saved under `evaluation/results/`.
+
+## Testing
+
+Run the test suite:
 
 ```bash
-PYTHONPATH=. venv/bin/python evaluation/evaluate_mot.py \
-  --pred demo/sample_outputs/mot17_09_frcnn.mot.txt \
-  --sequence-dir MOT17-09-FRCNN \
-  --start-frame 100
+PYTHONPATH=. venv/bin/python -m pytest tests
 ```
 
-### Example metrics commands for the included local sequences
+Run tests with coverage through the `Makefile`:
 
 ```bash
-make metrics \
-  PRED=demo/sample_outputs/mot17_09_frcnn.mot.txt \
-  SEQ=MOT17-09-FRCNN
+make test
 ```
+
+Run linting:
 
 ```bash
-make metrics \
-  PRED=demo/sample_outputs/mot17_11_frcnn.mot.txt \
-  SEQ=MOT17-11-FRCNN
+make lint
 ```
-
-For `MOT17-04-FRCNN`, the same command will work only after that folder has been populated correctly:
-
-```bash
-make metrics \
-  PRED=demo/sample_outputs/mot17_04.mot.txt \
-  SEQ=MOT17-04-FRCNN
-```
-
-### Where evaluation output is saved
-
-The evaluation script prints metrics to the terminal and also writes reports into:
-
-```text
-evaluation/results/
-```
-
-Typical outputs include:
-
-- `evaluation/results/<prediction_name>_metrics.txt`
-- `evaluation/results/metrics_summary.csv`
 
 ## Makefile Commands
 
-### Main commands
-
-```bash
-make install
-make dirs
-make download-models
-make run
-make test
-make lint
-make metrics PRED=demo/sample_outputs/output.mot.txt SEQ=MOT17-09-FRCNN
-```
-
-### Notes on the Makefile
+The repository includes these convenience targets:
 
 - `make install`
-  - creates the virtual environment and installs dependencies
 - `make dirs`
-  - creates runtime directories used by the pipeline
 - `make run`
-  - runs tracking with configurable `CONFIG`, `INPUT`, and `OUTPUT`
 - `make test`
-  - runs unit tests
 - `make lint`
-  - runs `ruff` on source, tests, and scripts
 - `make metrics`
-  - evaluates a generated MOT prediction file against a MOT sequence folder
+- `make download-models`
 
-## Configuration Files
-
-### `configs/default.yaml`
-
-This is the default runtime configuration and includes:
-
-- automatic device selection
-- Ultralytics detector
-- DeepSORT tracker
-- output settings for JSON and MOT export
-- visualization settings such as trail length and labels
-
-### `configs/ultralytics_deepsort.yaml`
-
-This is another detector/tracker configuration with different thresholds and class settings.
-
-## Typical End-to-End Workflow
+Important note: `make run` currently defaults to `configs/default.yaml`, but the present code path is most reliable with `configs/rtdetr_ocsort.yaml`. If you want to use `make run`, override the config explicitly:
 
 ```bash
-git clone <your-repo-url>
-cd MultiObjectTracking-Yolov9
-make install
-make dirs
-make download-models
 make run \
+  CONFIG=configs/rtdetr_ocsort.yaml \
   INPUT=demo/sample_videos/mot17_09_frcnn.mp4 \
-  OUTPUT=demo/sample_outputs/mot17_09_frcnn.mp4
-make metrics \
-  PRED=demo/sample_outputs/mot17_09_frcnn.mot.txt \
-  SEQ=MOT17-09-FRCNN
+  OUTPUT=demo/sample_outputs/mot17-09-ocsort.mp4
 ```
 
-## Tests
+## Notes About Local Assets
 
-Run:
+- Model weights are ignored by Git.
+- `demo/sample_videos/` is ignored by Git.
+- `demo/sample_outputs/` is ignored by Git.
+- `demo/hf_runs/` is ignored by Git.
+- `MOT17*` folders are ignored by Git.
+- `evaluation/results/` is ignored by Git.
+
+That means a fresh clone gives you the code, but not the large runtime assets.
+
+## Known Caveats
+
+- The DeepSORT config path is currently incomplete because `src/trackers/factory.py` expects `tracker.max_iou_distance`, but that key is missing from `configs/default.yaml` and `configs/ultralytics_deepsort.yaml`.
+- `scripts/download_models.py` currently downloads `rtdetr-l.pt`; if you use the `rtdetr_ocsort_x.yaml` config, you need `rtdetr-x.pt` locally as well.
+- The sample commands assume your local videos already exist in `demo/sample_videos/`.
+- MOT evaluation requires a valid local MOT sequence directory with `gt/gt.txt` and `seqinfo.ini`.
+
+## Verified In This Workspace
+
+- The unit test suite passes with:
 
 ```bash
-make test
+venv/bin/python -m pytest tests
 ```
 
-Current tests cover:
-
-- schema dataclasses
-- template captioning fallback behavior
-- bounding-box conversion utilities
-- MOT export formatting
-
-## Important Notes for Contributors and Users
-
-- Large assets are intentionally not tracked in Git.
-- Dataset folders, model weights, sample videos, and generated outputs are expected to be added locally.
-- If you share this project with another user, make sure they know they must:
-  - create the runtime folders
-  - place videos into `demo/sample_videos/`
-  - download or copy weights into `models/`
-  - locally add any MOT17 sequence folders they want to evaluate
-- `MOT17-04-FRCNN/` in this workspace should currently be treated as a local placeholder unless it is populated with a valid MOT structure.
-
-## Troubleshooting
-
-### `make install` fails
-
-Make sure you are using Python 3.10 or newer:
-
-```bash
-python3 --version
-```
-
-### `make run` fails because input video is missing
-
-Make sure the input file exists, for example:
-
-```bash
-ls demo/sample_videos
-```
-
-### `make metrics` fails
-
-Check all of the following:
-
-- the prediction `.mot.txt` file exists
-- the sequence directory exists
-- the sequence directory contains `gt/gt.txt`
-- the sequence directory contains `seqinfo.ini`
-
-### `MOT17-04-FRCNN` does not evaluate
-
-That is expected until the folder is populated with:
-
-- `img1/`
-- `gt/gt.txt`
-- `det/det.txt`
-- `seqinfo.ini`
-
-## Summary
-
-This repository provides a practical local workflow for:
-
-- running multi-object tracking on videos
-- exporting MOT-format tracking predictions
-- evaluating those predictions against MOTChallenge-style sequence folders
-
-For most users, the core commands to remember are:
-
-```bash
-make install
-make dirs
-make download-models
-make run
-make metrics PRED=demo/sample_outputs/output.mot.txt SEQ=MOT17-09-FRCNN
-```
+- The RT-DETR + OC-SORT config path can be instantiated successfully.
+- The older DeepSORT configs are not the best default for the current codebase without config updates.
