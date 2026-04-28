@@ -22,24 +22,47 @@ DEFAULT_CONFIG = "configs/rtdetr_ocsort.yaml"
 DEFAULT_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 APP_CSS = """
+body, .gradio-container {
+background: #0f1117 !important;
+color: #f5f5f5 !important;
+}
+
+.gradio-container {
+max-width: 1550px !important;
+}
+
+h1, h2, h3, p, label, span {
+color: #f5f5f5 !important;
+}
+
+.block, .form, .panel, .wrap {
+background: #1f2229 !important;
+border-color: #343843 !important;
+}
+
+textarea, input {
+background: #252932 !important;
+color: #f5f5f5 !important;
+}
+
 #video_facts_box .cm-editor,
 #fact_box .cm-editor,
 #evidence_box .cm-editor {
-    height: 400px !important;
-    overflow-y: auto !important;
+height: 400px !important;
+overflow-y: auto !important;
 }
 
 #video_facts_box .cm-scroller,
 #fact_box .cm-scroller,
 #evidence_box .cm-scroller {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
+overflow-y: auto !important;
+overflow-x: hidden !important;
 }
 
 #video_facts_box,
 #fact_box,
 #evidence_box {
-    overflow: hidden !important;
+overflow: hidden !important;
 }
 """
 
@@ -543,8 +566,16 @@ def answer_question(
         str(evidence_download_path),
     )
 
+theme = gr.themes.Soft(
+    primary_hue="orange",
+    neutral_hue="slate",
+)
 
-with gr.Blocks(title="RT-DETR + OC-SORT Video RAG", css=APP_CSS) as demo:
+with gr.Blocks(
+    title="RT-DETR + OC-SORT Video RAG",
+    theme=theme,
+    css=APP_CSS,
+) as demo:
     gr.Markdown(
         """
         # Multi Object Tracking System with AI-Driven Retrieval and Question Answering
