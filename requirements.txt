@@ -1,32 +1,27 @@
-# Core app
 gradio
-fastapi
-uvicorn
-python-multipart
+huggingface-hub==0.36.0
 
-# Video / CV
+torch
+torchvision
+ultralytics
+boxmot==13.0.7
+deep-sort-realtime
+filterpy
+lapx
+
 opencv-python-headless
 numpy
 pillow
 PyYAML
 tqdm
 
-# Detection + tracking
-torch
-torchvision
-ultralytics
-boxmot
-deep-sort-realtime
-filterpy
-lapx
-
-# RAG
 faiss-cpu
 sentence-transformers
 transformers
-huggingface-hub
 
-# Evaluation / utilities
+fastapi
+uvicorn
+python-multipart
 motmetrics
 pandas
 scipy
