@@ -11,38 +11,17 @@ from src.rag.answer_engine import AnswerEngine
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Query retrieval index for MOT RAG.")
 
-    parser.add_argument(
-        "--index",
-        required=True,
-        help="Path to FAISS index file.",
-    )
-    parser.add_argument(
-        "--metadata",
-        required=True,
-        help="Path to metadata JSON file.",
-    )
-    parser.add_argument(
-        "--query",
-        required=True,
-        help="Natural language query.",
-    )
-    parser.add_argument(
-        "--top-k",
-        type=int,
-        default=5,
-        help="Number of retrieved chunks to return.",
-    )
+    parser.add_argument("--index", required=True, help="Path to FAISS index file.")
+    parser.add_argument("--metadata", required=True, help="Path to metadata JSON file.")
+    parser.add_argument("--query", required=True, help="Natural language query.")
+    parser.add_argument("--top-k", type=int, default=5, help="Number of retrieved chunks to return.")
     parser.add_argument(
         "--chunk-type",
         default=None,
-        choices=["track", "event", "time_window", None],
+        choices=["track", "event", "time_window", "appearance", None],
         help="Optional chunk type filter.",
     )
-    parser.add_argument(
-        "--video-facts",
-        required=False,
-        help="Optional path to video_facts.json",
-    )
+    parser.add_argument("--video-facts", required=False, help="Optional path to video_facts.json")
     parser.add_argument(
         "--model",
         default="sentence-transformers/all-MiniLM-L6-v2",
@@ -64,52 +43,6 @@ def load_video_facts(path: str | None) -> dict | None:
         return json.load(f)
 
 
-def try_answer_from_facts(query: str, facts: dict | None):
-    if facts is None:
-        return None, None, None
-
-    q = query.lower()
-
-    # Longest track
-    if "longest" in q:
-        t = facts.get("longest_track")
-        if t:
-            answer = (
-                f"Track {t['track_id']} stayed the longest for "
-                f"{t['duration_seconds']:.2f} seconds "
-                f"(frames {t['first_frame']}–{t['last_frame']})."
-            )
-            return answer, "longest_track", t
-
-    # Most crowded
-    if "crowded" in q or "peak" in q:
-        w = facts.get("most_crowded_window")
-        if w:
-            answer = (
-                f"The scene was most crowded from frame {w['start_frame']} to {w['end_frame']} "
-                f"({w['start_time_seconds']:.2f}–{w['end_time_seconds']:.2f}s) "
-                f"with {w['visible_count']} tracks."
-            )
-            return answer, "most_crowded_window", w
-
-    # Unique count
-    if "how many" in q and "unique" in q:
-        value = facts.get("total_unique_tracks")
-        return f"There are {value} unique tracks.", "total_unique_tracks", value
-
-    # Long presence count
-    if "long" in q and "how many" in q:
-        value = facts.get("total_long_presence_tracks")
-        return f"There are {value} long-presence tracks.", "total_long_presence_tracks", value
-
-    # Fragmented count
-    if "fragmented" in q and "how many" in q:
-        value = facts.get("total_fragmented_tracks")
-        return f"There are {value} fragmented tracks.", "total_fragmented_tracks", value
-
-    return None, None, None
-
-
 def main() -> None:
     args = parse_args()
 
@@ -126,8 +59,6 @@ def main() -> None:
 
     video_facts = load_video_facts(args.video_facts)
 
-    fact_answer, fact_key, fact_value = try_answer_from_facts(args.query, video_facts)
-
     results = retriever.search(
         query=args.query,
         top_k=args.top_k,
@@ -135,10 +66,13 @@ def main() -> None:
     )
 
     engine = AnswerEngine()
-    engine_result = engine.answer(args.query, results)
+    package = engine.answer(
+        query=args.query,
+        retrieved_chunks=results,
+        video_facts=video_facts,
+    )
 
-    final_answer = fact_answer if fact_answer is not None else engine_result["answer"]
-    answer_source = "video_facts" if fact_answer is not None else "retrieval"
+    answer_source = "video_facts" if package.supporting_fact_key is not None else "retrieval"
 
     print("=" * 90)
     print(f"Query: {args.query}")
@@ -146,16 +80,12 @@ def main() -> None:
     print("=" * 90)
 
     print("\n🧠 FINAL ANSWER:\n")
-    print(final_answer)
+    print(package.final_answer)
 
-    if fact_answer is not None:
+    if package.supporting_fact_key is not None:
         print("\n📌 SUPPORTING FACT (video_facts.json):\n")
-
-        if fact_key is not None:
-            print(f"Fact key: {fact_key}")
-
-        if fact_value is not None:
-            print(json.dumps(fact_value, indent=2))
+        print(f"Fact key: {package.supporting_fact_key}")
+        print(json.dumps(package.supporting_fact_value, indent=2))
 
         print("\nℹ️ NOTE:\n")
         print(

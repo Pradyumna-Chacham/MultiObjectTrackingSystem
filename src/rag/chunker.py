@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass, asdict
 from typing import Any
 import json
@@ -33,6 +34,7 @@ class ChunkBuilder:
     ) -> list[RetrievalChunk]:
         chunks: list[RetrievalChunk] = []
         chunks.extend(self.build_track_chunks(track_facts))
+        chunks.extend(self.build_appearance_chunks(track_facts))
         chunks.extend(self.build_event_chunks(events))
         chunks.extend(self.build_time_window_chunks(track_facts, events))
         chunks.sort(key=lambda x: (x.start_frame, x.chunk_type, x.chunk_id))
@@ -94,6 +96,73 @@ class ChunkBuilder:
 
         return chunks
 
+    def build_appearance_chunks(self, track_facts: list[dict[str, Any]]) -> list[RetrievalChunk]:
+        chunks: list[RetrievalChunk] = []
+
+        for t in track_facts:
+            appearance = t.get("appearance")
+            if appearance is None:
+                continue
+
+            if bool(appearance.get("low_confidence", False)):
+                continue
+
+            track_id = int(t["track_id"])
+            class_name = str(t.get("class_name", "person"))
+            first_frame = int(t.get("first_frame", 0))
+            last_frame = int(t.get("last_frame", first_frame))
+            confidence = float(appearance.get("confidence", 0.0))
+
+            upper_color = appearance.get("upper_color")
+            upper_color_base = appearance.get("upper_color_base", upper_color)
+            lower_color = appearance.get("lower_color")
+            lower_color_base = appearance.get("lower_color_base", lower_color)
+            evidence_frames = [int(x) for x in appearance.get("evidence_frames", [])]
+
+            if not upper_color and not lower_color:
+                continue
+
+            if upper_color and lower_color:
+                text = (
+                    f"Person with track ID {track_id} wore {upper_color} on top and {lower_color} "
+                    f"on the bottom, observed consistently across multiple high-confidence frames."
+                )
+            elif upper_color:
+                text = (
+                    f"Person with track ID {track_id} wore {upper_color} on top, observed consistently "
+                    f"across multiple high-confidence frames."
+                )
+            else:
+                text = (
+                    f"Person with track ID {track_id} wore {lower_color} on the bottom, observed consistently "
+                    f"across multiple high-confidence frames."
+                )
+
+            chunks.append(
+                RetrievalChunk(
+                    chunk_id=f"appearance_{track_id}",
+                    chunk_type="appearance",
+                    text=text,
+                    start_frame=first_frame,
+                    end_frame=last_frame,
+                    timestamp=first_frame / self.fps,
+                    track_ids=[track_id],
+                    metadata={
+                        "track_id": track_id,
+                        "class_name": class_name,
+                        "upper_color": upper_color,
+                        "upper_color_base": upper_color_base,
+                        "lower_color": lower_color,
+                        "lower_color_base": lower_color_base,
+                        "confidence": confidence,
+                        "low_confidence": False,
+                        "evidence_frames": evidence_frames,
+                    },
+                )
+            )
+
+        return chunks
+
     def build_event_chunks(self, events: list[dict[str, Any]]) -> list[RetrievalChunk]:
         chunks: list[RetrievalChunk] = []
 
@@ -139,6 +208,7 @@ class ChunkBuilder:
         if not track_facts:
             return chunks
 
+        track_map = {int(t["track_id"]): t for t in track_facts}
         max_frame = max(int(t["last_frame"]) for t in track_facts)
         window = self.window_frames
 
@@ -184,12 +254,41 @@ class ChunkBuilder:
             exiting_tracks = sorted(set(exiting_tracks))
             long_presence_tracks = sorted(set(long_presence_tracks))
 
+            entry_side_counts = Counter()
+            exit_side_counts = Counter()
+
+            for tid in entering_tracks:
+                t = track_map.get(tid)
+                if t is not None:
+                    entry_side_counts[str(t.get("entry_side", "unknown"))] += 1
+
+            for tid in exiting_tracks:
+                t = track_map.get(tid)
+                if t is not None:
+                    exit_side_counts[str(t.get("exit_side", "unknown"))] += 1
+
+            entry_side_counts_dict = dict(sorted(entry_side_counts.items()))
+            exit_side_counts_dict = dict(sorted(exit_side_counts.items()))
+
+            entry_side_summary = (
+                ", ".join(f"{side}: {count}" for side, count in entry_side_counts_dict.items())
+                if entry_side_counts_dict
+                else "none"
+            )
+            exit_side_summary = (
+                ", ".join(f"{side}: {count}" for side, count in exit_side_counts_dict.items())
+                if exit_side_counts_dict
+                else "none"
+            )
+
             text = (
                 f"Time window from frame {start} to {end} "
                 f"({start / self.fps:.2f} to {end / self.fps:.2f} seconds) has {visible_count} active tracks. "
                 f"Active track IDs: {active_track_ids}. "
                 f"Entering tracks: {entering_tracks}. "
+                f"Entry counts by side in this window: {entry_side_summary}. "
                 f"Exiting tracks: {exiting_tracks}. "
+                f"Exit counts by side in this window: {exit_side_summary}. "
                 f"Long presence tracks overlapping this window: {long_presence_tracks}. "
                 f"Crowded: {crowded}."
             )
@@ -210,6 +309,8 @@ class ChunkBuilder:
                         "long_presence_tracks": long_presence_tracks,
                         "crowded": crowded,
                         "window_frames": window,
+                        "entry_side_counts": entry_side_counts_dict,
+                        "exit_side_counts": exit_side_counts_dict,
                     },
                 )
             )

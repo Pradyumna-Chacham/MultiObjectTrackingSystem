@@ -40,23 +40,72 @@ class AppConfig:
 
     @property
     def events(self) -> dict[str, Any]:
-        return self.raw["events"]
+        return self.raw.get("events", {})
 
     @property
     def captioning(self) -> dict[str, Any]:
-        return self.raw["captioning"]
+        return self.raw.get("captioning", {})
 
     @property
     def visualization(self) -> dict[str, Any]:
-        return self.raw["visualization"]
+        return self.raw.get("visualization", {})
 
     @property
     def output(self) -> dict[str, Any]:
-        return self.raw["output"]
+        return self.raw.get("output", {})
 
     @property
     def demo(self) -> dict[str, Any]:
-        return self.raw["demo"]
+        return self.raw.get("demo", {})
+
+    @property
+    def appearance(self) -> dict[str, Any]:
+        """
+        Optional appearance-extraction config.
+
+        This block is intentionally optional so the core tracking pipeline
+        still works even when appearance extraction is not configured or not run.
+        """
+        defaults: dict[str, Any] = {
+            "enabled": False,
+            "sample_count": 5,
+            "min_crop_width": 30,
+            "min_crop_height": 60,
+            "center_crop_ratio": 0.70,
+            "kmeans_k": 3,
+            "cluster_distance_threshold": 30.0,
+            "low_confidence_threshold": 0.50,
+            "skin_hue_min": 0,
+            "skin_hue_max": 25,
+            "skin_sat_min": 20,
+            "skin_sat_max": 255,
+            "skin_val_min": 40,
+            "skin_val_max": 255,
+            "canonical_color_map": {
+                "navy": "blue",
+                "sky_blue": "blue",
+                "pink": "red",
+                "orange": "orange",
+                "brown": "brown",
+                "black": "black",
+                "white": "white",
+                "gray": "gray",
+                "red": "red",
+                "blue": "blue",
+                "green": "green",
+                "yellow": "yellow",
+            },
+        }
+
+        user_cfg = self.raw.get("appearance", {})
+        merged = dict(defaults)
+        merged.update(user_cfg)
+
+        canonical_map = dict(defaults["canonical_color_map"])
+        canonical_map.update(user_cfg.get("canonical_color_map", {}))
+        merged["canonical_color_map"] = canonical_map
+
+        return merged
 
     @property
     def seed(self) -> int:

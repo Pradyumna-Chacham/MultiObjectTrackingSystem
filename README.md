@@ -66,6 +66,7 @@ The orchestrator loads the detector, resets the tracker, reads frames, runs dete
 The structured analytics path is driven by:
 
 - `scripts/build_tracks.py`
+- `scripts/extract_appearance.py`
 - `scripts/extract_events.py`
 - `scripts/build_chunks.py`
 - `scripts/build_video_facts.py`
@@ -81,20 +82,46 @@ Those scripts use the modules in `src/rag/` to transform tracking output into:
 - video-level summary facts
 - a FAISS index and metadata file
 
-### Web app
+## Execution Order
 
-The Gradio app in `app.py` ties the whole flow together:
+The core processing pipeline runs in this order:
 
-1. Upload a video.
-2. Run tracking.
-3. Build all RAG artifacts.
-4. Download generated files.
-5. Ask grounded questions about the processed video.
+1. `scripts/run_demo.py`
+   - runs the tracking pipeline, writes `*.tracks.json` and `*.mot.txt`
+2. `scripts/build_tracks.py`
+   - consolidates frame-level tracks into built track histories
+3. `scripts/extract_appearance.py`
+   - extracts clothing/appearance metadata for tracked subjects
+4. `scripts/extract_events.py`
+   - extracts structured events and per-track facts
+5. `scripts/build_video_facts.py` *(optional: omit to skip to chunks-first path)*
+   - builds global video facts from tracks and events (chunks are optional for richer statistics)
+6. `scripts/build_chunks.py`
+   - converts facts and events into retrieval chunks
+7. `scripts/build_index.py`
+   - creates a FAISS index and metadata for retrieval
+8. `scripts/query_rag.py`
+   - runs question-answering queries against the built artifacts
+
+**Note:** Steps 5 and 6 are interchangeable. You can:
+- Build video facts first (minimal), then chunks, or
+- Build chunks first, then pass chunks to video facts for enriched statistics (current example order)
+
+If you want appearance-aware color queries, run `scripts/extract_appearance.py` before `scripts/build_chunks.py`, then include the appearance-enhanced tracks file when chunking.
+
+## App and API
+
+- `app.py` is the Gradio front end for upload-based processing, artifact downloads, and QA.
+- `api.py` provides the same underlying flow as a FastAPI server with:
+  - `POST /run-pipeline`
+  - `POST /query`
+- Both use the same backend logic to run the pipeline and answer queries.
 
 ## Repository Structure
 
 ```text
 .
+├── api.py
 ├── app.py
 ├── configs/
 │   ├── default.yaml
@@ -108,6 +135,7 @@ The Gradio app in `app.py` ties the whole flow together:
 │   ├── run_demo.py
 │   ├── download_models.py
 │   ├── build_tracks.py
+│   ├── extract_appearance.py
 │   ├── extract_events.py
 │   ├── build_chunks.py
 │   ├── build_video_facts.py
@@ -156,7 +184,9 @@ The Gradio app in `app.py` ties the whole flow together:
 - `demo/sample_outputs/`
   Generated videos and JSON/TXT artifacts.
 - `demo/hf_runs/`
-  Per-run Gradio app output bundles.
+  Per-run Gradio app output bundles from the earlier UI flow.
+- `demo/api_runs/`
+  Per-run backend artifacts for the FastAPI/Gradio pipeline.
 
 ### MOT sequence folders
 
@@ -260,6 +290,8 @@ After tracking finishes, the RAG pipeline adds structure in several stages:
 - entry/exit counts by side
 - direction counts
 - average track duration
+
+**Note:** This script requires `track_facts` and `events`, but `chunks` is optional. If chunks are provided, they enrich the statistics; otherwise, facts are computed from tracks and events alone.
 
 ### 5. Retrieval and answering
 
@@ -376,6 +408,17 @@ If your chosen config points to a different location, either place the file ther
 
 ## Commands To Run The Project
 
+The execution order for the full workflow is:
+
+1. `scripts/run_demo.py`
+2. `scripts/build_tracks.py`
+3. `scripts/extract_appearance.py`
+4. `scripts/extract_events.py`
+5. `scripts/build_video_facts.py` *(optional first step)*
+6. `scripts/build_chunks.py`
+7. `scripts/build_index.py`
+8. `scripts/query_rag.py`
+
 This section is ordered from the simplest working path to the full analytics and QA workflow.
 
 ### 1. Run the main tracking pipeline
@@ -424,27 +467,79 @@ PYTHONPATH=. venv/bin/python scripts/build_tracks.py \
   --frame-height 1080
 ```
 
-### 3. Extract events and per-track facts
+### 3. Extract appearance for tracked subjects
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/extract_appearance.py \
+  --config configs/rtdetr_ocsort.yaml \
+  --tracks demo/sample_outputs/mot17-09-ocsort.built_tracks.json \
+  --video demo/sample_videos/mot17_09_frcnn.mp4 \
+  --output demo/sample_outputs/mot17-09-ocsort.built_tracks.appearance.json
+```
+
+### 4. Extract events and per-track facts
 
 ```bash
 PYTHONPATH=. venv/bin/python scripts/extract_events.py \
-  --input demo/sample_outputs/mot17-09-ocsort.built_tracks.json \
+  --input demo/sample_outputs/mot17-09-ocsort.built_tracks.appearance.json \
   --events-output demo/sample_outputs/mot17-09-ocsort.events.json \
   --facts-output demo/sample_outputs/mot17-09-ocsort.track_facts.json \
   --fps 30
 ```
 
-### 4. Build retrieval chunks
+This step preserves any `appearance` metadata on tracks so downstream video facts and chunk generation can use it.
+
+If you prefer to keep the original built tracks file, you can instead pass the appearance-enhanced tracks file separately:
 
 ```bash
-PYTHONPATH=. venv/bin/python scripts/build_chunks.py \
-  --track-facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
-  --events demo/sample_outputs/mot17-09-ocsort.events.json \
-  --output demo/sample_outputs/mot17-09-ocsort.chunks.json \
+PYTHONPATH=. venv/bin/python scripts/extract_events.py \
+  --input demo/sample_outputs/mot17-09-ocsort.built_tracks.json \
+  --appearance-tracks demo/sample_outputs/mot17-09-ocsort.built_tracks.appearance.json \
+  --events-output demo/sample_outputs/mot17-09-ocsort.events.json \
+  --facts-output demo/sample_outputs/mot17-09-ocsort.track_facts.json \
   --fps 30
 ```
 
-### 5. Build global video facts
+### 5. Build global video facts (optional: can skip to chunks if preferred)
+
+Minimal approach (facts from events only):
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_video_facts.py \
+  --track-facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --events demo/sample_outputs/mot17-09-ocsort.events.json \
+  --fps 30 \
+  --output demo/sample_outputs/mot17-09-ocsort.video_facts.json
+```
+
+### 6. Build retrieval chunks
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_chunks.py \
+  --config configs/rtdetr_ocsort.yaml \
+  --track_facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --events demo/sample_outputs/mot17-09-ocsort.events.json \
+  --output demo/sample_outputs/mot17-09-ocsort.chunks.json
+```
+
+### 6b. Optional: include appearance metadata in chunk creation
+
+If you have run `scripts/extract_appearance.py` and then `scripts/extract_events.py` on the appearance-enhanced tracks, your generated `track_facts.json` already carries the `appearance` field and can be chunked directly.
+
+If you instead want to merge appearance from a separate appearance-enhanced tracks file, use:
+
+```bash
+PYTHONPATH=. venv/bin/python scripts/build_chunks.py \
+  --config configs/rtdetr_ocsort.yaml \
+  --track_facts demo/sample_outputs/mot17-09-ocsort.track_facts.json \
+  --events demo/sample_outputs/mot17-09-ocsort.events.json \
+  --tracks_with_appearance demo/sample_outputs/mot17-09-ocsort.built_tracks.appearance.json \
+  --output demo/sample_outputs/mot17-09-ocsort.chunks.json
+```
+
+### 7. Optional: Rebuild video facts with chunk enrichment
+
+If you skipped step 5, or want richer statistics after building chunks:
 
 ```bash
 PYTHONPATH=. venv/bin/python scripts/build_video_facts.py \
@@ -455,7 +550,7 @@ PYTHONPATH=. venv/bin/python scripts/build_video_facts.py \
   --output demo/sample_outputs/mot17-09-ocsort.video_facts.json
 ```
 
-### 6. Build the FAISS retrieval index
+### 8. Build the FAISS retrieval index
 
 ```bash
 PYTHONPATH=. venv/bin/python scripts/build_index.py \

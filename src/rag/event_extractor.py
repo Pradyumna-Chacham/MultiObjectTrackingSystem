@@ -36,6 +36,8 @@ class TrackFact:
     avg_speed_px_per_frame: float
     is_short_lived: bool
     is_fragmented: bool
+    appearance: dict[str, Any] | None = None
+    appearance_skip_reason: str | None = None
 
 
 class EventExtractor:
@@ -75,6 +77,8 @@ class EventExtractor:
                     avg_speed_px_per_frame=float(t["avg_speed_px_per_frame"]),
                     is_short_lived=bool(t["is_short_lived"]),
                     is_fragmented=bool(t["is_fragmented"]),
+                    appearance=t.get("appearance"),
+                    appearance_skip_reason=t.get("appearance_skip_reason"),
                 )
             )
         return facts
@@ -92,6 +96,25 @@ class EventExtractor:
             entry_side = str(t["entry_side"])
             exit_side = str(t["exit_side"])
 
+            appearance_metadata = None
+            if t.get("appearance") is not None:
+                appearance_metadata = {
+                    "appearance": t.get("appearance"),
+                    "appearance_skip_reason": t.get("appearance_skip_reason"),
+                }
+
+            enter_metadata = {
+                "class_name": class_name,
+                "entry_side": entry_side,
+            }
+            exit_metadata = {
+                "class_name": class_name,
+                "exit_side": exit_side,
+            }
+            if appearance_metadata is not None:
+                enter_metadata.update(appearance_metadata)
+                exit_metadata.update(appearance_metadata)
+
             events.append(
                 ExtractedEvent(
                     event_type="enter",
@@ -99,10 +122,7 @@ class EventExtractor:
                     start_frame=first_frame,
                     end_frame=first_frame,
                     timestamp=first_frame / self.fps,
-                    metadata={
-                        "class_name": class_name,
-                        "entry_side": entry_side,
-                    },
+                    metadata=enter_metadata,
                 )
             )
 
@@ -113,12 +133,25 @@ class EventExtractor:
                     start_frame=last_frame,
                     end_frame=last_frame,
                     timestamp=last_frame / self.fps,
-                    metadata={
-                        "class_name": class_name,
-                        "exit_side": exit_side,
-                    },
+                    metadata=exit_metadata,
                 )
             )
+
+            direction_metadata = {
+                "class_name": class_name,
+                "direction": direction,
+            }
+            long_presence_metadata = {
+                "class_name": class_name,
+                "duration_seconds": duration_seconds,
+            }
+            fragmented_metadata = {
+                "class_name": class_name,
+            }
+            if appearance_metadata is not None:
+                direction_metadata.update(appearance_metadata)
+                long_presence_metadata.update(appearance_metadata)
+                fragmented_metadata.update(appearance_metadata)
 
             events.append(
                 ExtractedEvent(
@@ -127,10 +160,7 @@ class EventExtractor:
                     start_frame=first_frame,
                     end_frame=last_frame,
                     timestamp=first_frame / self.fps,
-                    metadata={
-                        "class_name": class_name,
-                        "direction": direction,
-                    },
+                    metadata=direction_metadata,
                 )
             )
 
@@ -142,10 +172,7 @@ class EventExtractor:
                         start_frame=first_frame,
                         end_frame=last_frame,
                         timestamp=first_frame / self.fps,
-                        metadata={
-                            "class_name": class_name,
-                            "duration_seconds": duration_seconds,
-                        },
+                        metadata=long_presence_metadata,
                     )
                 )
 
@@ -157,9 +184,7 @@ class EventExtractor:
                         start_frame=first_frame,
                         end_frame=last_frame,
                         timestamp=first_frame / self.fps,
-                        metadata={
-                            "class_name": class_name,
-                        },
+                        metadata=fragmented_metadata,
                     )
                 )
 

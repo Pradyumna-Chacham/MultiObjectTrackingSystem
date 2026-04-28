@@ -76,6 +76,13 @@ class PipelineOrchestrator:
                 # ---- DETECTOR ----
                 det_t0 = time.perf_counter()
                 detections = self.detector.detect(frame, frame_index)
+
+                detections = self.detector.detect(frame, frame_index)
+
+                # ✅ DEBUG (add this)
+                if frame_index < 5:
+                    print([det.class_name for det in detections])
+
                 if torch.cuda.is_available():
                     torch.cuda.synchronize()
                 det_t1 = time.perf_counter()

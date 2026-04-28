@@ -15,7 +15,7 @@ from src.rag.answer_engine import AnswerEngine
 
 
 ROOT = Path(__file__).resolve().parent
-TMP_DIR = ROOT / "demo" / "hf_runs"
+TMP_DIR = ROOT / "demo" / "api_runs"
 TMP_DIR.mkdir(parents=True, exist_ok=True)
 
 DEFAULT_CONFIG = "configs/rtdetr_ocsort.yaml"
@@ -87,6 +87,7 @@ def make_run_paths(video_path: str) -> dict[str, Path]:
 
     return {
         "run_dir": run_dir,
+        "input_video": run_dir / Path(video_path).name,
         "output_video": run_dir / f"{stem}.tracked.mp4",
         "mot_txt": run_dir / f"{stem}.mot.txt",
         "tracks_json": run_dir / f"{stem}.tracks.json",
@@ -122,6 +123,219 @@ def build_bundle_zip(run_dir: Path, bundle_path: Path) -> str:
             zf.write(path, arcname=path.name)
 
     return str(bundle_path)
+
+
+def copy_latest_pipeline_outputs(paths: dict[str, Path]) -> None:
+    sample_outputs_dir = ROOT / "demo" / "sample_outputs"
+
+    track_candidates = sorted(
+        sample_outputs_dir.glob("*.tracks.json"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    mot_candidates = sorted(
+        sample_outputs_dir.glob("*.mot.txt"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+
+    if not track_candidates:
+        existing = "\n".join(str(p) for p in sample_outputs_dir.glob("*"))
+        raise gr.Error(
+            "Tracking finished, but tracks JSON was not found.\n\n"
+            f"Searched in: {sample_outputs_dir}\n\n"
+            f"Existing files there:\n{existing}"
+        )
+
+    shutil.copy2(track_candidates[0], paths["tracks_json"])
+
+    if mot_candidates:
+        shutil.copy2(mot_candidates[0], paths["mot_txt"])
+
+
+def run_pipeline_backend(
+    input_video: Path,
+    config_path: str,
+    fps: float,
+    frame_width: int,
+    frame_height: int,
+    model_name: str,
+) -> dict[str, Any]:
+    cfg_path = ROOT / config_path
+    if not cfg_path.exists():
+        raise gr.Error(f"Config not found: {cfg_path}")
+
+    paths = make_run_paths(input_video.name)
+
+    if input_video.resolve() != paths["input_video"].resolve():
+        shutil.copy2(input_video, paths["input_video"])
+
+    logs: list[str] = []
+
+    cmd_demo = [
+        sys.executable,
+        "scripts/run_demo.py",
+        "--config",
+        config_path,
+        "--input",
+        str(paths["input_video"]),
+        "--output",
+        str(paths["output_video"]),
+    ]
+    logs.append(">>> Running tracking pipeline")
+    logs.append(run_command(cmd_demo))
+
+    copy_latest_pipeline_outputs(paths)
+
+    cmd_tracks = [
+        sys.executable,
+        "scripts/build_tracks.py",
+        "--input",
+        str(paths["tracks_json"]),
+        "--output",
+        str(paths["built_tracks"]),
+        "--fps",
+        str(fps),
+        "--frame-width",
+        str(frame_width),
+        "--frame-height",
+        str(frame_height),
+    ]
+    logs.append(">>> Building consolidated tracks")
+    logs.append(run_command(cmd_tracks))
+
+    cmd_events = [
+        sys.executable,
+        "scripts/extract_events.py",
+        "--input",
+        str(paths["built_tracks"]),
+        "--events-output",
+        str(paths["events_json"]),
+        "--facts-output",
+        str(paths["track_facts"]),
+        "--fps",
+        str(fps),
+    ]
+    logs.append(">>> Extracting events")
+    logs.append(run_command(cmd_events))
+
+    cmd_chunks = [
+        sys.executable,
+        "scripts/build_chunks.py",
+        "--config",
+        config_path,
+        "--track_facts",
+        str(paths["track_facts"]),
+        "--events",
+        str(paths["events_json"]),
+        "--output",
+        str(paths["chunks_json"]),
+    ]
+    logs.append(">>> Building retrieval chunks")
+    logs.append(run_command(cmd_chunks))
+
+    cmd_video_facts = [
+        sys.executable,
+        "scripts/build_video_facts.py",
+        "--track-facts",
+        str(paths["track_facts"]),
+        "--events",
+        str(paths["events_json"]),
+        "--chunks",
+        str(paths["chunks_json"]),
+        "--fps",
+        str(fps),
+        "--output",
+        str(paths["video_facts"]),
+    ]
+    logs.append(">>> Building video facts")
+    logs.append(run_command(cmd_video_facts))
+
+    cmd_index = [
+        sys.executable,
+        "scripts/build_index.py",
+        "--chunks",
+        str(paths["chunks_json"]),
+        "--index-output",
+        str(paths["faiss_index"]),
+        "--metadata-output",
+        str(paths["index_meta"]),
+        "--model",
+        model_name,
+    ]
+    logs.append(">>> Building FAISS index")
+    logs.append(run_command(cmd_index))
+
+    with open(paths["video_facts"], "r", encoding="utf-8") as f:
+        video_facts = json.load(f)
+
+    bundle_zip = build_bundle_zip(paths["run_dir"], paths["bundle_zip"])
+
+    return {
+        "run_id": paths["run_dir"].name,
+        "run_dir": str(paths["run_dir"]),
+        "output_video": str(paths["output_video"]),
+        "mot_txt": str(paths["mot_txt"]) if paths["mot_txt"].exists() else None,
+        "tracks_json": str(paths["tracks_json"]),
+        "built_tracks": str(paths["built_tracks"]),
+        "events_json": str(paths["events_json"]),
+        "track_facts": str(paths["track_facts"]),
+        "chunks_json": str(paths["chunks_json"]),
+        "video_facts": video_facts,
+        "video_facts_path": str(paths["video_facts"]),
+        "faiss_index": str(paths["faiss_index"]),
+        "index_meta": str(paths["index_meta"]),
+        "bundle_zip": bundle_zip,
+        "logs": "\n\n".join(logs),
+    }
+
+
+def answer_query_backend(
+    run_id: str,
+    query: str,
+    top_k: int,
+    chunk_type: str | None,
+    model_name: str,
+) -> dict[str, Any]:
+    run_dir = TMP_DIR / run_id
+    if not run_dir.exists():
+        raise gr.Error(f"Run not found: {run_id}")
+
+    video_facts_path = next(run_dir.glob("*.video_facts.json"), None)
+    faiss_index_path = next(run_dir.glob("*.faiss.index"), None)
+    index_meta_path = next(run_dir.glob("*.index_meta.json"), None)
+
+    if video_facts_path is None or faiss_index_path is None or index_meta_path is None:
+        raise gr.Error("Required artifacts not found. Run the pipeline first.")
+
+    with open(video_facts_path, "r", encoding="utf-8") as f:
+        video_facts = json.load(f)
+
+    retriever = ChunkRetriever(model_name=model_name)
+    retriever.load(str(faiss_index_path), str(index_meta_path))
+
+    results = retriever.search(
+        query=query,
+        top_k=int(top_k),
+        chunk_type=None if chunk_type in (None, "", "auto") else chunk_type,
+    )
+
+    engine = AnswerEngine()
+    package = engine.answer(
+        query=query,
+        retrieved_chunks=results,
+        video_facts=video_facts,
+    )
+
+    return {
+        "run_id": run_id,
+        "query": query,
+        "answer": package.final_answer,
+        "answer_source": "video_facts" if package.supporting_fact_key is not None else "retrieval",
+        "supporting_fact_key": package.supporting_fact_key,
+        "supporting_fact_value": package.supporting_fact_value,
+        "retrieved_evidence": results,
+    }
 
 
 def run_tracking_pipeline(
@@ -295,53 +509,34 @@ def answer_question(
     if not query.strip():
         raise gr.Error("Please enter a question.")
 
-    run_dir = Path(run_dir_str)
-    video_facts_path = next(run_dir.glob("*.video_facts.json"), None)
-    faiss_index_path = next(run_dir.glob("*.faiss.index"), None)
-    index_meta_path = next(run_dir.glob("*.index_meta.json"), None)
-
-    if video_facts_path is None or faiss_index_path is None or index_meta_path is None:
-        raise gr.Error("Required artifacts not found. Please run the pipeline first.")
-
-    with open(video_facts_path, "r", encoding="utf-8") as f:
-        video_facts = json.load(f)
-
-    retriever = ChunkRetriever(model_name=model_name)
-    retriever.load(str(faiss_index_path), str(index_meta_path))
-
-    results = retriever.search(
+    result = answer_query_backend(
+        run_id=run_dir_str,
         query=query,
-        top_k=int(top_k),
-        chunk_type=None if chunk_type == "auto" else chunk_type,
-    )
-
-    engine = AnswerEngine()
-    package = engine.answer(
-        query=query,
-        retrieved_chunks=results,
-        video_facts=video_facts,
+        top_k=top_k,
+        chunk_type=None if chunk_type in (None, "", "auto") else chunk_type,
+        model_name=model_name,
     )
 
     fact_text = ""
     fact_download_path: Path | None = None
 
-    if package.supporting_fact_key is not None:
+    if result["supporting_fact_key"] is not None:
         fact_payload: dict[str, Any] = {
-            "fact_key": package.supporting_fact_key,
-            "fact_value": package.supporting_fact_value,
+            "fact_key": result["supporting_fact_key"],
+            "fact_value": result["supporting_fact_value"],
         }
         fact_text = json.dumps(fact_payload, indent=2)
-        fact_download_path = run_dir / "supporting_fact.json"
+        fact_download_path = Path(run_dir_str) / "supporting_fact.json"
         with open(fact_download_path, "w", encoding="utf-8") as f:
             json.dump(fact_payload, f, indent=2)
 
-    evidence_text = json.dumps(results, indent=2)
-    evidence_download_path = run_dir / f"retrieved_evidence.json"
+    evidence_text = json.dumps(result["retrieved_evidence"], indent=2)
+    evidence_download_path = Path(run_dir_str) / f"retrieved_evidence.json"
     with open(evidence_download_path, "w", encoding="utf-8") as f:
-        json.dump(results, f, indent=2)
+        json.dump(result["retrieved_evidence"], f, indent=2)
 
     return (
-        package.final_answer,
+        result["answer"],
         fact_text,
         evidence_text,
         str(fact_download_path) if fact_download_path else None,

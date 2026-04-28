@@ -28,6 +28,9 @@ class VideoFacts:
     top_longest_tracks: list[dict[str, Any]]
     top_shortest_tracks: list[dict[str, Any]]
     top_high_confidence_tracks: list[dict[str, Any]]
+    total_appearance_tracks: int
+    total_confident_appearance_tracks: int
+    top_appearance_tracks: list[dict[str, Any]]
 
     avg_track_duration_frames: float
     avg_track_duration_seconds: float
@@ -71,6 +74,12 @@ class VideoFactBuilder:
         top_shortest_tracks = self._top_tracks(track_facts, key="duration_seconds", reverse=False, n=5)
         top_high_confidence_tracks = self._top_tracks(track_facts, key="avg_confidence", reverse=True, n=5)
 
+        appearance_tracks = [t for t in track_facts if t.get("appearance") is not None]
+        confident_appearance_tracks = [
+            t for t in appearance_tracks if not bool(t.get("appearance", {}).get("low_confidence", False))
+        ]
+        top_appearance_tracks = self._top_appearance_tracks(appearance_tracks, n=5)
+
         avg_track_duration_frames = (
             sum(float(t.get("duration_frames", 0)) for t in track_facts) / max(len(track_facts), 1)
         )
@@ -97,6 +106,9 @@ class VideoFactBuilder:
             top_longest_tracks=top_longest_tracks,
             top_shortest_tracks=top_shortest_tracks,
             top_high_confidence_tracks=top_high_confidence_tracks,
+            total_appearance_tracks=len(appearance_tracks),
+            total_confident_appearance_tracks=len(confident_appearance_tracks),
+            top_appearance_tracks=top_appearance_tracks,
             avg_track_duration_frames=avg_track_duration_frames,
             avg_track_duration_seconds=avg_track_duration_seconds,
             avg_visible_tracks_per_window=avg_visible_tracks_per_window,
@@ -211,6 +223,26 @@ class VideoFactBuilder:
                 }
 
         return best
+
+    def _top_appearance_tracks(self, appearance_tracks: list[dict[str, Any]], n: int = 5) -> list[dict[str, Any]]:
+        sorted_tracks = sorted(
+            appearance_tracks,
+            key=lambda t: float(t.get("appearance", {}).get("confidence", 0.0)),
+            reverse=True,
+        )
+        return [self._compact_appearance_summary(t) for t in sorted_tracks[:n]]
+
+    def _compact_appearance_summary(self, t: dict[str, Any]) -> dict[str, Any]:
+        appearance = t.get("appearance") or {}
+        return {
+            "track_id": int(t.get("track_id", -1)),
+            "upper_color": appearance.get("upper_color"),
+            "lower_color": appearance.get("lower_color"),
+            "upper_color_base": appearance.get("upper_color_base"),
+            "lower_color_base": appearance.get("lower_color_base"),
+            "confidence": float(appearance.get("confidence", 0.0)),
+            "low_confidence": bool(appearance.get("low_confidence", False)),
+        }
 
     def _avg_visible_tracks_per_window(self, chunks: list[dict[str, Any]] | None) -> float:
         if not chunks:

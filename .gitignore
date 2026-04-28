@@ -48,6 +48,7 @@ MOT17*/
 # Generated outputs
 # =========================
 demo/hf_runs/
+demo/api_runs/
 demo/sample_outputs/
 demo/sample_videos/
 
@@ -66,8 +67,13 @@ evaluation/results/
 # Temporary / cache
 # =========================
 .cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 tmp/
 temp/
+.coverage
+.coverage.*
 
 # =========================
 # IDEs

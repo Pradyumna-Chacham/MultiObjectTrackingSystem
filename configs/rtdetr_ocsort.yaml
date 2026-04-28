@@ -12,10 +12,12 @@ detector:
 
 tracker:
   name: ocsort
+  
   det_thresh: 0.22
   max_age: 50
   min_hits: 3
   iou_threshold: 0.30
+  max_iou_distance: 0.7
   per_class: false
 
 input:
@@ -46,3 +48,50 @@ visualization:
 profiling:
   enabled: true
   log_every_n_frames: 25
+
+
+appearance:
+  enabled: true
+
+  # Number of high-confidence observations per track to sample
+  sample_count: 5
+
+  # Skip appearance extraction for very small person crops
+  min_crop_width: 30
+  min_crop_height: 60
+
+  # Keep the center region of the bbox to reduce background contamination
+  center_crop_ratio: 0.70
+
+  # KMeans configuration
+  kmeans_k: 3
+
+  # If remaining cluster centers are too close in HSV space,
+  # treat the clothing as effectively monochrome / uniform
+  cluster_distance_threshold: 30.0
+
+  # Final aggregated confidence below this becomes low_confidence=true
+  low_confidence_threshold: 0.50
+
+  # Tunable HSV skin filtering bounds
+  skin_hue_min: 0
+  skin_hue_max: 25
+  skin_sat_min: 20
+  skin_sat_max: 255
+  skin_val_min: 40
+  skin_val_max: 255
+
+  # Display color -> retrieval base color mapping
+  canonical_color_map:
+    navy: blue
+    sky_blue: blue
+    pink: red
+    orange: orange
+    brown: brown
+    black: black
+    white: white
+    gray: gray
+    red: red
+    blue: blue
+    green: green
+    yellow: yellow

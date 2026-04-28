@@ -200,7 +200,9 @@ class TrackBuilder:
             return "top"
         if y >= self.frame_height - y_margin:
             return "bottom"
-        return "interior"
+
+        # 🔥 CHANGE THIS LINE
+        return "unknown"
 
     def _is_fragmented(self, frame_indices: list[int]) -> bool:
         if len(frame_indices) < 2:

@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Minimum active tracks in a window to mark it crowded.",
     )
+    parser.add_argument(
+        "--appearance-tracks",
+        required=False,
+        help="Optional appearance-enhanced built tracks JSON to merge before extraction.",
+    )
     return parser.parse_args()
 
 
@@ -60,6 +65,16 @@ def default_facts_path(input_path: Path) -> Path:
     if input_path.name.endswith(".built_tracks.json"):
         return input_path.with_name(input_path.name.replace(".built_tracks.json", ".track_facts.json"))
     return input_path.with_name(f"{input_path.stem}.track_facts.json")
+
+
+def merge_appearance(built_tracks: list[dict], appearance_tracks: list[dict]) -> list[dict]:
+    appearance_map = {int(t["track_id"]): t for t in appearance_tracks}
+    for t in built_tracks:
+        track_id = int(t["track_id"])
+        if track_id in appearance_map:
+            t["appearance"] = appearance_map[track_id].get("appearance")
+            t["appearance_skip_reason"] = appearance_map[track_id].get("appearance_skip_reason")
+    return built_tracks
 
 
 def main() -> None:
@@ -76,6 +91,13 @@ def main() -> None:
     facts_output.parent.mkdir(parents=True, exist_ok=True)
 
     built_tracks = load_built_tracks(str(input_path))
+
+    if args.appearance_tracks:
+        appearance_path = Path(args.appearance_tracks)
+        if not appearance_path.exists():
+            raise FileNotFoundError(f"Appearance tracks file not found: {appearance_path}")
+        appearance_tracks = load_built_tracks(str(appearance_path))
+        built_tracks = merge_appearance(built_tracks, appearance_tracks)
 
     extractor = EventExtractor(
         fps=args.fps,
