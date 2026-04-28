@@ -1,3 +1,19 @@
+---
+title: MultiObjectTracking RAG App
+emoji: 🎥
+colorFrom: blue
+colorTo: indigo
+sdk: gradio
+sdk_version: "5.0.0"
+python_version: "3.10"
+app_file: app.py
+pinned: false
+---
+
+# Multi-Object Tracking RAG App
+
+Upload a video, run RT-DETR + OC-SORT tracking, generate tracking artifacts, and ask natural-language questions about the video.
+
 # Multi-Object Tracking with RT-DETR, OC-SORT, and Video RAG
 
 This repository is a modular video analytics project that combines:
