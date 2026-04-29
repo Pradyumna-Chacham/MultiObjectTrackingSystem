@@ -12,7 +12,13 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Build retrieval chunks")
 
     parser.add_argument("--config", type=str, required=True)
-    parser.add_argument("--track_facts", type=str, required=True)
+    parser.add_argument(
+        "--track_facts",
+        "--track-facts",
+        type=str,
+        required=True,
+        help="Tracks facts JSON file path",
+    )
     parser.add_argument("--events", type=str, required=True)
 
     # 🔥 NEW: appearance-enhanced tracks

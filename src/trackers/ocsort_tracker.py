@@ -38,28 +38,17 @@ class OCSORTTracker:
         self._build_tracker()
 
     def _build_tracker(self) -> None:
-        try:
-            self.tracker = OcSort(
-                det_thresh=self.conf_threshold,
-                max_age=self.max_age,
-                min_hits=self.min_hits,
-                iou_threshold=self.iou_threshold,
-                delta_t=self.delta_t,
-                asso_func=self.asso_func,
-                inertia=self.inertia,
-                use_byte=self.use_byte,
-            )
-        except TypeError:
-            self.tracker = OcSort(
-                det_thresh=self.conf_threshold,
-                max_age=self.max_age,
-                min_hits=self.min_hits,
-                asso_threshold=self.iou_threshold,
-                delta_t=self.delta_t,
-                asso_func=self.asso_func,
-                inertia=self.inertia,
-                use_byte=self.use_byte,
-            )
+        self.tracker = OcSort(
+            det_thresh=self.det_thresh,
+            max_age=self.max_age,
+            min_hits=self.min_hits,
+            iou_threshold=self.iou_threshold,
+            delta_t=self.delta_t,
+            inertia=self.inertia,
+            use_byte=self.use_byte,
+            Q_xy_scaling=self.Q_xy_scaling,
+            Q_s_scaling=self.Q_s_scaling,
+        )
 
     def reset(self) -> None:
         self._build_tracker()

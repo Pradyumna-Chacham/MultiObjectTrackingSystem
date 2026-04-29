@@ -456,14 +456,14 @@ def run_tracking_pipeline(
     cmd_chunks = [
         sys.executable,
         "scripts/build_chunks.py",
-        "--track-facts",
+        "--config",
+        config_path,
+        "--track_facts",
         str(paths["track_facts"]),
         "--events",
         str(paths["events_json"]),
         "--output",
         str(paths["chunks_json"]),
-        "--fps",
-        str(fps),
     ]
     logs.append(">>> Building retrieval chunks")
     logs.append(run_command(cmd_chunks))
@@ -566,13 +566,9 @@ def answer_question(
         str(evidence_download_path),
     )
 
-theme = gr.themes.Soft(
-    primary_hue="orange",
-    neutral_hue="slate",
-)
-
 with gr.Blocks(
     title="RT-DETR + OC-SORT Video RAG",
+    css=APP_CSS,
 ) as demo:
     gr.Markdown(
         """
@@ -705,4 +701,4 @@ with gr.Blocks(
 
 
 if __name__ == "__main__":
-    demo.launch(theme=theme, css=APP_CSS)
+    demo.launch()
