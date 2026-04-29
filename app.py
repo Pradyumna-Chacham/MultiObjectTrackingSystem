@@ -573,8 +573,6 @@ theme = gr.themes.Soft(
 
 with gr.Blocks(
     title="RT-DETR + OC-SORT Video RAG",
-    theme=theme,
-    css=APP_CSS,
 ) as demo:
     gr.Markdown(
         """
@@ -604,7 +602,7 @@ with gr.Blocks(
                     label="Video Facts",
                     lines=18,
                     interactive=False,
-                    show_copy_button=True,
+                    
                     elem_id="video_facts_box",
                 )
                 with gr.Row():
@@ -666,14 +664,14 @@ with gr.Blocks(
                     label="Supporting Fact",
                     lines=10,
                     interactive=False,
-                    show_copy_button=True,
+                    
                     elem_id="fact_box",
                 )
                 evidence_box = gr.Textbox(
                     label="Retrieved Evidence",
                     lines=16,
                     interactive=False,
-                    show_copy_button=True,
+                    
                     elem_id="evidence_box",
                 )
                 with gr.Row():
@@ -707,4 +705,4 @@ with gr.Blocks(
 
 
 if __name__ == "__main__":
-    demo.launch()
+    demo.launch(theme=theme, css=APP_CSS)
