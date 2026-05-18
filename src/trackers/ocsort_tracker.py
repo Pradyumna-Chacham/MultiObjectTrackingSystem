@@ -4,7 +4,7 @@ from typing import Any
 
 import numpy as np
 from boxmot.trackers.ocsort.ocsort import OcSort
-
+import inspect
 from src.schemas import Detection, Track
 
 
@@ -38,17 +38,47 @@ class OCSORTTracker:
         self._build_tracker()
 
     def _build_tracker(self) -> None:
-        self.tracker = OcSort(
-            det_thresh=self.det_thresh,
-            max_age=self.max_age,
-            min_hits=self.min_hits,
-            iou_threshold=self.iou_threshold,
-            delta_t=self.delta_t,
-            inertia=self.inertia,
-            use_byte=self.use_byte,
-            Q_xy_scaling=self.Q_xy_scaling,
-            Q_s_scaling=self.Q_s_scaling,
+    sig = inspect.signature(OcSort.__init__)
+
+    kwargs = dict(
+        delta_t=self.delta_t,
+        inertia=self.inertia,
+        use_byte=self.use_byte,
+        Q_xy_scaling=self.Q_xy_scaling,
+        Q_s_scaling=self.Q_s_scaling,
+    )
+
+    # Local BoxMOT 16.x uses min_conf.
+    if "min_conf" in sig.parameters:
+        kwargs["min_conf"] = self.det_thresh
+
+    # Older BoxMOT versions may use det_thresh.
+    if "det_thresh" in sig.parameters:
+        kwargs["det_thresh"] = self.det_thresh
+
+    if "max_age" in sig.parameters:
+        kwargs["max_age"] = self.max_age
+
+    if "min_hits" in sig.parameters:
+        kwargs["min_hits"] = self.min_hits
+
+    # Different BoxMOT / OC-SORT versions use different names.
+    if "iou_threshold" in sig.parameters:
+        kwargs["iou_threshold"] = self.iou_threshold
+    elif "asso_threshold" in sig.parameters:
+        kwargs["asso_threshold"] = self.iou_threshold
+    else:
+        has_kwargs = any(
+            p.kind == inspect.Parameter.VAR_KEYWORD
+            for p in sig.parameters.values()
         )
+        if has_kwargs:
+            kwargs["iou_threshold"] = self.iou_threshold
+
+    if "per_class" in sig.parameters:
+        kwargs["per_class"] = self.per_class
+
+    self.tracker = OcSort(**kwargs)
 
     def reset(self) -> None:
         self._build_tracker()
